@@ -12,3 +12,5 @@ COPY . .
 # 開発サーバーを起動
 EXPOSE 3000
 CMD ["npm", "run", "dev"]
+
+

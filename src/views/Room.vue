@@ -130,6 +130,35 @@
             </button>
           </div>
         </div>
+
+        <!-- デバッグ情報 -->
+        <div class="mt-6">
+          <button
+            @click="showDebug = !showDebug"
+            class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"
+          >
+            {{ showDebug ? 'デバッグ情報を隠す' : 'デバッグ情報を表示' }}
+          </button>
+
+          <div v-if="showDebug" class="mt-4 p-4 bg-gray-100 border border-gray-300 rounded-lg">
+            <h3 class="text-lg font-semibold text-gray-800 mb-2">デバッグ情報</h3>
+            <div class="max-h-64 overflow-y-auto">
+              <div
+                v-for="(message, index) in debugMessages"
+                :key="index"
+                class="text-sm text-gray-700 mb-1 font-mono"
+              >
+                {{ message }}
+              </div>
+            </div>
+            <button
+              @click="debugMessages = []"
+              class="mt-2 px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"
+            >
+              ログをクリア
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -155,19 +184,41 @@ const showAnswerInput = ref(false)
 const answer = ref('')
 const playerName = ref('')
 
+// デバッグ情報
+const debugMessages = ref<string[]>([])
+const showDebug = ref(false)
+
 onMounted(() => {
   // プレイヤー名を入力
   const name = prompt('プレイヤー名を入力してください:')
   if (name) {
     playerName.value = name
-    connectToRoom()
+    addDebugMessage(`プレイヤー名: ${playerName.value}`)
+
+    // 既存ルームを使用するかどうか確認
+    const useExistingRoom = confirm('既存のルーム（MWAD9E0VU7）を使用しますか？\n「OK」= 既存ルーム使用\n「キャンセル」= 新しいルーム作成')
+
+    if (useExistingRoom) {
+      // 既存ルームを使用
+      roomId = 'MWAD9E0VU7'
+      addDebugMessage(`既存ルームを使用: ${roomId}`)
+      connectToRoomDirectly()
+    } else {
+      // 新しいルームを作成
+      connectToRoom()
+    }
   }
 })
 
-const connectToRoom = () => {
+const connectToRoomDirectly = () => {
+  addDebugMessage('WebSocket接続開始: ws://localhost:8080/ws')
+  console.log('WebSocket接続開始:', 'ws://localhost:8080/ws')
   socket = new WebSocket('ws://localhost:8080/ws')
 
   socket.onopen = () => {
+    addDebugMessage('WebSocket接続成功')
+    console.log('WebSocket接続成功')
+
     // ルーム参加メッセージを送信
     const joinMessage = {
       event: 'join-room',
@@ -176,15 +227,33 @@ const connectToRoom = () => {
         playerName: playerName.value
       }
     }
+    addDebugMessage(`join-room メッセージ: ${JSON.stringify(joinMessage)}`)
+    console.log('ルーム参加メッセージ送信:', joinMessage)
     socket!.send(JSON.stringify(joinMessage))
   }
 
+  // WebSocketメッセージ処理を追加
   socket.onmessage = (event) => {
+    addDebugMessage(`メッセージ受信: ${event.data}`)
+    console.log('WebSocketメッセージ受信:', event.data)
+
+    // 生のメッセージを詳細にログ出力
+    addDebugMessage(`生メッセージ長: ${event.data.length}文字`)
+    addDebugMessage(`生メッセージ型: ${typeof event.data}`)
+
     try {
       const data = JSON.parse(event.data)
+      addDebugMessage(`解析されたメッセージ: ${JSON.stringify(data)}`)
+      console.log('解析されたメッセージ:', data)
+
+      // イベントタイプを詳細にログ出力
+      addDebugMessage(`イベントタイプ: ${data.event}`)
+      addDebugMessage(`データキー: ${Object.keys(data.data || {})}`)
 
       switch (data.event) {
         case 'room-updated':
+          addDebugMessage(`ルーム更新: プレイヤー数=${data.data.players?.length || 0}`)
+          console.log('ルーム更新:', data.data)
           players.value = data.data.players
           gameState.value = data.data.gameState
           currentQuestion.value = data.data.currentQuestion
@@ -192,6 +261,8 @@ const connectToRoom = () => {
           break
 
         case 'buzz-result':
+          addDebugMessage(`早押し結果: ${JSON.stringify(data.data)}`)
+          console.log('早押し結果:', data.data)
           if (data.data.success) {
             showAnswerInput.value = true
             canBuzz.value = false
@@ -201,6 +272,8 @@ const connectToRoom = () => {
           break
 
         case 'question-result':
+          addDebugMessage(`回答結果: ${JSON.stringify(data.data)}`)
+          console.log('回答結果:', data.data)
           showAnswerInput.value = false
           answer.value = ''
           if (data.data.correct) {
@@ -209,18 +282,190 @@ const connectToRoom = () => {
             alert(`不正解。正解は: ${data.data.correctAnswer}`)
           }
           break
+
+        case 'error':
+          addDebugMessage(`エラー: ${data.data.message}`)
+          console.error('バックエンドエラー:', data.data.message)
+          alert(`エラー: ${data.data.message}`)
+          break
+
+        default:
+          addDebugMessage(`未処理のイベント: ${data.event}`)
+          console.log('未処理のイベント:', data.event, data)
       }
     } catch (error) {
+      addDebugMessage(`メッセージ解析エラー: ${error}`)
       console.error('メッセージ解析エラー:', error)
     }
   }
 
   socket.onerror = (error) => {
+    addDebugMessage(`WebSocket接続エラー: ${error}`)
     console.error('WebSocket接続エラー:', error)
+    alert('WebSocket接続エラーが発生しました。バックエンドサーバーが起動しているか確認してください。')
   }
 
   socket.onclose = (event) => {
+    addDebugMessage(`WebSocket接続切断: ${event.code} - ${event.reason}`)
     console.log('WebSocket接続切断:', event.code, event.reason)
+    if (event.code !== 1000) {
+      alert(`WebSocket接続が予期せず切断されました: ${event.code} - ${event.reason}`)
+    }
+  }
+}
+
+const addDebugMessage = (message: string) => {
+  debugMessages.value.push(`[${new Date().toLocaleTimeString()}] ${message}`)
+  if (debugMessages.value.length > 50) {
+    debugMessages.value.shift()
+  }
+}
+
+const createRoom = async () => {
+  try {
+    addDebugMessage('ルーム作成API呼び出し開始')
+    const response = await fetch('http://localhost:8080/api/rooms', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: `Room ${roomId}`
+      })
+    })
+
+    addDebugMessage(`ルーム作成APIレスポンス: ${response.status}`)
+
+    if (response.ok) {
+      const data = await response.json()
+      addDebugMessage(`ルーム作成成功: ${JSON.stringify(data)}`)
+      console.log('ルーム作成成功:', data)
+      return data.roomId
+    } else {
+      addDebugMessage(`ルーム作成失敗: ${response.status} ${response.statusText}`)
+      throw new Error(`ルーム作成失敗: ${response.status}`)
+    }
+  } catch (error) {
+    addDebugMessage(`ルーム作成エラー: ${error}`)
+    console.error('ルーム作成エラー:', error)
+    throw error
+  }
+}
+
+const connectToRoom = async () => {
+  try {
+    // まずルーム作成を試行
+    addDebugMessage('ルーム作成を試行中...')
+    const createdRoomId = await createRoom()
+
+    // 作成されたroomIdを使用
+    const actualRoomId = createdRoomId || roomId
+    addDebugMessage(`使用するroomId: ${actualRoomId}`)
+
+    addDebugMessage('WebSocket接続開始: ws://localhost:8080/ws')
+    console.log('WebSocket接続開始:', 'ws://localhost:8080/ws')
+    socket = new WebSocket('ws://localhost:8080/ws')
+
+    socket.onopen = () => {
+      addDebugMessage('WebSocket接続成功')
+      console.log('WebSocket接続成功')
+
+      // ルーム参加メッセージを送信
+      const joinMessage = {
+        event: 'join-room',
+        data: {
+          roomId: actualRoomId,
+          playerName: playerName.value
+        }
+      }
+      addDebugMessage(`join-room メッセージ: ${JSON.stringify(joinMessage)}`)
+      console.log('ルーム参加メッセージ送信:', joinMessage)
+      socket!.send(JSON.stringify(joinMessage))
+    }
+
+    // WebSocketメッセージ処理を追加
+    socket.onmessage = (event) => {
+      addDebugMessage(`メッセージ受信: ${event.data}`)
+      console.log('WebSocketメッセージ受信:', event.data)
+
+      // 生のメッセージを詳細にログ出力
+      addDebugMessage(`生メッセージ長: ${event.data.length}文字`)
+      addDebugMessage(`生メッセージ型: ${typeof event.data}`)
+
+      try {
+        const data = JSON.parse(event.data)
+        addDebugMessage(`解析されたメッセージ: ${JSON.stringify(data)}`)
+        console.log('解析されたメッセージ:', data)
+
+        // イベントタイプを詳細にログ出力
+        addDebugMessage(`イベントタイプ: ${data.event}`)
+        addDebugMessage(`データキー: ${Object.keys(data.data || {})}`)
+
+        switch (data.event) {
+          case 'room-updated':
+            addDebugMessage(`ルーム更新: プレイヤー数=${data.data.players?.length || 0}`)
+            console.log('ルーム更新:', data.data)
+            players.value = data.data.players
+            gameState.value = data.data.gameState
+            currentQuestion.value = data.data.currentQuestion
+            canBuzz.value = data.data.canBuzz
+            break
+
+          case 'buzz-result':
+            addDebugMessage(`早押し結果: ${JSON.stringify(data.data)}`)
+            console.log('早押し結果:', data.data)
+            if (data.data.success) {
+              showAnswerInput.value = true
+              canBuzz.value = false
+            } else {
+              alert('他のプレイヤーが先に押しました！')
+            }
+            break
+
+          case 'question-result':
+            addDebugMessage(`回答結果: ${JSON.stringify(data.data)}`)
+            console.log('回答結果:', data.data)
+            showAnswerInput.value = false
+            answer.value = ''
+            if (data.data.correct) {
+              alert('正解！')
+            } else {
+              alert(`不正解。正解は: ${data.data.correctAnswer}`)
+            }
+            break
+
+          case 'error':
+            addDebugMessage(`エラー: ${data.data.message}`)
+            console.error('バックエンドエラー:', data.data.message)
+            alert(`エラー: ${data.data.message}`)
+            break
+
+          default:
+            addDebugMessage(`未処理のイベント: ${data.event}`)
+            console.log('未処理のイベント:', data.event, data)
+        }
+      } catch (error) {
+        addDebugMessage(`メッセージ解析エラー: ${error}`)
+        console.error('メッセージ解析エラー:', error)
+      }
+    }
+
+    socket.onerror = (error) => {
+      addDebugMessage(`WebSocket接続エラー: ${error}`)
+      console.error('WebSocket接続エラー:', error)
+      alert('WebSocket接続エラーが発生しました。バックエンドサーバーが起動しているか確認してください。')
+    }
+
+    socket.onclose = (event) => {
+      addDebugMessage(`WebSocket接続切断: ${event.code} - ${event.reason}`)
+      console.log('WebSocket接続切断:', event.code, event.reason)
+      if (event.code !== 1000) {
+        alert(`WebSocket接続が予期せず切断されました: ${event.code} - ${event.reason}`)
+      }
+    }
+  } catch (error) {
+    addDebugMessage(`ルーム作成に失敗しました: ${error}`)
+    alert(`ルーム作成に失敗しました: ${error}`)
   }
 }
 
