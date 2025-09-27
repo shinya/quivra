@@ -131,6 +131,31 @@
           </div>
         </div>
 
+        <!-- 管理者機能 -->
+        <div class="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <h3 class="text-lg font-semibold text-red-800 mb-3">管理者機能</h3>
+          <div class="flex flex-wrap gap-2">
+            <button
+              @click="startGame"
+              class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+            >
+              ゲーム開始
+            </button>
+            <button
+              @click="resetQueue"
+              class="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+            >
+              キューリセット
+            </button>
+            <button
+              @click="endGame"
+              class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
+            >
+              ゲーム終了
+            </button>
+          </div>
+        </div>
+
         <!-- デバッグ情報 -->
         <div class="mt-6">
           <button
@@ -260,6 +285,41 @@ const connectToRoomDirectly = () => {
           canBuzz.value = data.data.canBuzz
           break
 
+        case 'queue-updated':
+          addDebugMessage(`キュー更新: ${JSON.stringify(data.data)}`)
+          console.log('キュー更新:', data.data)
+          break
+
+        case 'judge-result':
+          addDebugMessage(`判定結果: ${JSON.stringify(data.data)}`)
+          console.log('判定結果:', data.data)
+          if (data.data.correct) {
+            alert('正解！')
+          } else {
+            alert('不正解')
+          }
+          showAnswerInput.value = false
+          answer.value = ''
+          break
+
+        case 'queue-reset':
+          addDebugMessage(`キューリセット: ${data.data.message}`)
+          console.log('キューリセット:', data.data)
+          alert('キューがリセットされました')
+          break
+
+        case 'game-ended':
+          addDebugMessage(`ゲーム終了: ${JSON.stringify(data.data)}`)
+          console.log('ゲーム終了:', data.data)
+          alert('ゲームが終了しました')
+          break
+
+        case 'success':
+          addDebugMessage(`成功: ${data.data.message}`)
+          console.log('成功:', data.data)
+          alert(data.data.message)
+          break
+
         case 'buzz-result':
           addDebugMessage(`早押し結果: ${JSON.stringify(data.data)}`)
           console.log('早押し結果:', data.data)
@@ -330,7 +390,9 @@ const createRoom = async () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        name: `Room ${roomId}`
+        name: `Room ${roomId}`,
+        is_public: true,
+        creator_name: playerName.value
       })
     })
 
@@ -411,6 +473,43 @@ const connectToRoom = async () => {
             canBuzz.value = data.data.canBuzz
             break
 
+          case 'queue-updated':
+            addDebugMessage(`キュー更新: ${JSON.stringify(data.data)}`)
+            console.log('キュー更新:', data.data)
+            // キュー情報を表示（必要に応じてUIに追加）
+            break
+
+          case 'judge-result':
+            addDebugMessage(`判定結果: ${JSON.stringify(data.data)}`)
+            console.log('判定結果:', data.data)
+            if (data.data.correct) {
+              alert('正解！')
+            } else {
+              alert('不正解')
+            }
+            showAnswerInput.value = false
+            answer.value = ''
+            break
+
+          case 'queue-reset':
+            addDebugMessage(`キューリセット: ${data.data.message}`)
+            console.log('キューリセット:', data.data)
+            alert('キューがリセットされました')
+            break
+
+          case 'game-ended':
+            addDebugMessage(`ゲーム終了: ${JSON.stringify(data.data)}`)
+            console.log('ゲーム終了:', data.data)
+            alert('ゲームが終了しました')
+            // ランキング表示（必要に応じてUIに追加）
+            break
+
+          case 'success':
+            addDebugMessage(`成功: ${data.data.message}`)
+            console.log('成功:', data.data)
+            alert(data.data.message)
+            break
+
           case 'buzz-result':
             addDebugMessage(`早押し結果: ${JSON.stringify(data.data)}`)
             console.log('早押し結果:', data.data)
@@ -489,6 +588,55 @@ const submitAnswer = () => {
       }
     }
     socket.send(JSON.stringify(message))
+  }
+}
+
+// 管理者機能
+const startGame = () => {
+  if (socket) {
+    const message = {
+      event: 'start-game',
+      data: { roomId }
+    }
+    socket.send(JSON.stringify(message))
+    addDebugMessage(`ゲーム開始メッセージ送信: ${JSON.stringify(message)}`)
+  }
+}
+
+const judgeAnswer = (playerId: string, correct: boolean) => {
+  if (socket) {
+    const message = {
+      event: 'judge-answer',
+      data: {
+        roomId,
+        playerId,
+        correct
+      }
+    }
+    socket.send(JSON.stringify(message))
+    addDebugMessage(`判定メッセージ送信: ${JSON.stringify(message)}`)
+  }
+}
+
+const resetQueue = () => {
+  if (socket) {
+    const message = {
+      event: 'reset-queue',
+      data: { roomId }
+    }
+    socket.send(JSON.stringify(message))
+    addDebugMessage(`キューリセットメッセージ送信: ${JSON.stringify(message)}`)
+  }
+}
+
+const endGame = () => {
+  if (socket) {
+    const message = {
+      event: 'end-game',
+      data: { roomId }
+    }
+    socket.send(JSON.stringify(message))
+    addDebugMessage(`ゲーム終了メッセージ送信: ${JSON.stringify(message)}`)
   }
 }
 
