@@ -6,7 +6,7 @@
         <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
           <div class="flex justify-between items-center">
             <div>
-              <h1 class="text-3xl font-bold text-gray-800 mb-2">ルーム: {{ roomId }}</h1>
+              <h1 class="text-3xl font-bold text-gray-800 mb-2">ルーム: {{ actualRoomId || roomId }}</h1>
               <div class="flex items-center gap-4 text-sm text-gray-600">
                 <div class="flex items-center gap-2">
                   <div class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
@@ -213,6 +213,9 @@ const playerName = ref('')
 const debugMessages = ref<string[]>([])
 const showDebug = ref(false)
 
+// 実際のルームID（作成されたルームのID）
+const actualRoomId = ref<string>('')
+
 onMounted(() => {
   // プレイヤー名を入力
   const name = prompt('プレイヤー名を入力してください:')
@@ -220,159 +223,11 @@ onMounted(() => {
     playerName.value = name
     addDebugMessage(`プレイヤー名: ${playerName.value}`)
 
-    // 既存ルームを使用するかどうか確認
-    const useExistingRoom = confirm('既存のルーム（MWAD9E0VU7）を使用しますか？\n「OK」= 既存ルーム使用\n「キャンセル」= 新しいルーム作成')
-
-    if (useExistingRoom) {
-      // 既存ルームを使用
-      roomId = 'MWAD9E0VU7'
-      addDebugMessage(`既存ルームを使用: ${roomId}`)
-      connectToRoomDirectly()
-    } else {
-      // 新しいルームを作成
-      connectToRoom()
-    }
+    // 新しいルームを作成
+    connectToRoom()
   }
 })
 
-const connectToRoomDirectly = () => {
-  addDebugMessage('WebSocket接続開始: ws://localhost:8080/ws')
-  console.log('WebSocket接続開始:', 'ws://localhost:8080/ws')
-  socket = new WebSocket('ws://localhost:8080/ws')
-
-  socket.onopen = () => {
-    addDebugMessage('WebSocket接続成功')
-    console.log('WebSocket接続成功')
-
-    // ルーム参加メッセージを送信
-    const joinMessage = {
-      event: 'join-room',
-      data: {
-        roomId,
-        playerName: playerName.value
-      }
-    }
-    addDebugMessage(`join-room メッセージ: ${JSON.stringify(joinMessage)}`)
-    console.log('ルーム参加メッセージ送信:', joinMessage)
-    socket!.send(JSON.stringify(joinMessage))
-  }
-
-  // WebSocketメッセージ処理を追加
-  socket.onmessage = (event) => {
-    addDebugMessage(`メッセージ受信: ${event.data}`)
-    console.log('WebSocketメッセージ受信:', event.data)
-
-    // 生のメッセージを詳細にログ出力
-    addDebugMessage(`生メッセージ長: ${event.data.length}文字`)
-    addDebugMessage(`生メッセージ型: ${typeof event.data}`)
-
-    try {
-      const data = JSON.parse(event.data)
-      addDebugMessage(`解析されたメッセージ: ${JSON.stringify(data)}`)
-      console.log('解析されたメッセージ:', data)
-
-      // イベントタイプを詳細にログ出力
-      addDebugMessage(`イベントタイプ: ${data.event}`)
-      addDebugMessage(`データキー: ${Object.keys(data.data || {})}`)
-
-      switch (data.event) {
-        case 'room-updated':
-          addDebugMessage(`ルーム更新: プレイヤー数=${data.data.players?.length || 0}`)
-          console.log('ルーム更新:', data.data)
-          players.value = data.data.players
-          gameState.value = data.data.gameState
-          currentQuestion.value = data.data.currentQuestion
-          canBuzz.value = data.data.canBuzz
-          break
-
-        case 'queue-updated':
-          addDebugMessage(`キュー更新: ${JSON.stringify(data.data)}`)
-          console.log('キュー更新:', data.data)
-          break
-
-        case 'judge-result':
-          addDebugMessage(`判定結果: ${JSON.stringify(data.data)}`)
-          console.log('判定結果:', data.data)
-          if (data.data.correct) {
-            alert('正解！')
-          } else {
-            alert('不正解')
-          }
-          showAnswerInput.value = false
-          answer.value = ''
-          break
-
-        case 'queue-reset':
-          addDebugMessage(`キューリセット: ${data.data.message}`)
-          console.log('キューリセット:', data.data)
-          alert('キューがリセットされました')
-          break
-
-        case 'game-ended':
-          addDebugMessage(`ゲーム終了: ${JSON.stringify(data.data)}`)
-          console.log('ゲーム終了:', data.data)
-          alert('ゲームが終了しました')
-          break
-
-        case 'success':
-          addDebugMessage(`成功: ${data.data.message}`)
-          console.log('成功:', data.data)
-          alert(data.data.message)
-          break
-
-        case 'buzz-result':
-          addDebugMessage(`早押し結果: ${JSON.stringify(data.data)}`)
-          console.log('早押し結果:', data.data)
-          if (data.data.success) {
-            showAnswerInput.value = true
-            canBuzz.value = false
-          } else {
-            alert('他のプレイヤーが先に押しました！')
-          }
-          break
-
-        case 'question-result':
-          addDebugMessage(`回答結果: ${JSON.stringify(data.data)}`)
-          console.log('回答結果:', data.data)
-          showAnswerInput.value = false
-          answer.value = ''
-          if (data.data.correct) {
-            alert('正解！')
-          } else {
-            alert(`不正解。正解は: ${data.data.correctAnswer}`)
-          }
-          break
-
-        case 'error':
-          addDebugMessage(`エラー: ${data.data.message}`)
-          console.error('バックエンドエラー:', data.data.message)
-          alert(`エラー: ${data.data.message}`)
-          break
-
-        default:
-          addDebugMessage(`未処理のイベント: ${data.event}`)
-          console.log('未処理のイベント:', data.event, data)
-      }
-    } catch (error) {
-      addDebugMessage(`メッセージ解析エラー: ${error}`)
-      console.error('メッセージ解析エラー:', error)
-    }
-  }
-
-  socket.onerror = (error) => {
-    addDebugMessage(`WebSocket接続エラー: ${error}`)
-    console.error('WebSocket接続エラー:', error)
-    alert('WebSocket接続エラーが発生しました。バックエンドサーバーが起動しているか確認してください。')
-  }
-
-  socket.onclose = (event) => {
-    addDebugMessage(`WebSocket接続切断: ${event.code} - ${event.reason}`)
-    console.log('WebSocket接続切断:', event.code, event.reason)
-    if (event.code !== 1000) {
-      alert(`WebSocket接続が予期せず切断されました: ${event.code} - ${event.reason}`)
-    }
-  }
-}
 
 const addDebugMessage = (message: string) => {
   debugMessages.value.push(`[${new Date().toLocaleTimeString()}] ${message}`)
@@ -421,8 +276,8 @@ const connectToRoom = async () => {
     const createdRoomId = await createRoom()
 
     // 作成されたroomIdを使用
-    const actualRoomId = createdRoomId || roomId
-    addDebugMessage(`使用するroomId: ${actualRoomId}`)
+    actualRoomId.value = createdRoomId || roomId
+    addDebugMessage(`使用するroomId: ${actualRoomId.value}`)
 
     addDebugMessage('WebSocket接続開始: ws://localhost:8080/ws')
     console.log('WebSocket接続開始:', 'ws://localhost:8080/ws')
@@ -436,7 +291,7 @@ const connectToRoom = async () => {
       const joinMessage = {
         event: 'join-room',
         data: {
-          roomId: actualRoomId,
+          roomId: actualRoomId.value,
           playerName: playerName.value
         }
       }
@@ -572,7 +427,7 @@ const buzzIn = () => {
   if (socket && canBuzz.value) {
     const message = {
       event: 'buzz-in',
-      data: { roomId }
+      data: { roomId: actualRoomId.value || roomId }
     }
     socket.send(JSON.stringify(message))
   }
@@ -583,7 +438,7 @@ const submitAnswer = () => {
     const message = {
       event: 'submit-answer',
       data: {
-        roomId,
+        roomId: actualRoomId.value || roomId,
         answer: answer.value.trim()
       }
     }
@@ -596,7 +451,7 @@ const startGame = () => {
   if (socket) {
     const message = {
       event: 'start-game',
-      data: { roomId }
+      data: { roomId: actualRoomId.value || roomId }
     }
     socket.send(JSON.stringify(message))
     addDebugMessage(`ゲーム開始メッセージ送信: ${JSON.stringify(message)}`)
@@ -608,7 +463,7 @@ const judgeAnswer = (playerId: string, correct: boolean) => {
     const message = {
       event: 'judge-answer',
       data: {
-        roomId,
+        roomId: actualRoomId.value || roomId,
         playerId,
         correct
       }
@@ -622,7 +477,7 @@ const resetQueue = () => {
   if (socket) {
     const message = {
       event: 'reset-queue',
-      data: { roomId }
+      data: { roomId: actualRoomId.value || roomId }
     }
     socket.send(JSON.stringify(message))
     addDebugMessage(`キューリセットメッセージ送信: ${JSON.stringify(message)}`)
@@ -633,7 +488,7 @@ const endGame = () => {
   if (socket) {
     const message = {
       event: 'end-game',
-      data: { roomId }
+      data: { roomId: actualRoomId.value || roomId }
     }
     socket.send(JSON.stringify(message))
     addDebugMessage(`ゲーム終了メッセージ送信: ${JSON.stringify(message)}`)
